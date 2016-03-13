@@ -1,0 +1,131 @@
+---
+title: "Practical Machine Learning"
+author: "Fábio Jorge"
+date: "8 de março de 2016"
+output: html_document
+---
+
+# Background
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways.
+
+## Obtainign and preparing the data
+
+Here I download the file from the website and remove all columns with more NULLs than valid data. I am also removing the columns with values that doesn't add value to the prediction, like names and dates.
+Finally, the clean dataset is splitted between the train (70%) and test (30%) data.
+
+```{r}
+
+setInternet2(use=TRUE);
+set.seed(3107)
+library(caret);
+library(rpart);
+library(rpart.plot);
+library(rattle);
+
+## Download the file
+download.file("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv",destfile="all_data.csv",method="auto");
+all_data <- read.csv("all_data.csv", na.strings=c("NA","#DIV/0!",""));
+
+num_lines <- nrow(all_data);
+num_columns <- length(all_data);
+
+## Some of the columns will be remove in order to not interfere with the analysis
+## They are dates, names and other data classifications not related to the biometric measurements
+cols_to_remove <- character()
+cols_to_remove <- append(cols_to_remove, "X")
+cols_to_remove <- append(cols_to_remove, "user_name")
+cols_to_remove <- append(cols_to_remove, "raw_timestamp_part_1")
+cols_to_remove <- append(cols_to_remove, "raw_timestamp_part_2")
+cols_to_remove <- append(cols_to_remove, "cvtd_timestamp")
+cols_to_remove <- append(cols_to_remove, "new_window")
+cols_to_remove <- append(cols_to_remove, "num_window")
+
+## I am also looping trough the data and selecting more columns to remove
+## This loop will select every column with more than half null values
+## If the column has a majority of nulls it will be ignored
+for(i in 1:num_columns)
+{ 
+        if( sum( is.na(all_data[,i]) ) > num_lines / 2 )
+        {
+                cols_to_remove <- append(cols_to_remove, names(all_data[i]))
+        }
+}
+
+## Removing the columns
+all_data2 <- all_data[ , !(names(all_data) %in% cols_to_remove)];
+
+## Now I have a clean dataset to split between train and test.
+split_data <- createDataPartition(all_data2$classe, p=0.7, list=FALSE);
+train_data <- all_data2[split_data, ];
+test_data <- all_data2[-split_data, ];
+
+rm(all_data);
+rm(all_data2);
+rm(split_data);
+
+```
+
+After preparing the data lets use train function from the caret package to the train dataset based on trees.
+
+## Training using trees
+
+```{r}
+## Training the model using trees
+train_data_tree <- train_data;
+test_data_tree <- test_data;
+
+modelFitTree <- train(classe ~.,data=train_data_tree, method="rpart");
+predictionsTree <- predict(modelFitTree,newdata=test_data_tree);
+confusionMatrix(predictionsTree, test_data_tree$classe);
+
+```
+
+According to the confusion matrix this prediction have a very low accuracy: 0.49. In fact I tried it with this week Project Quiz on Coursera and only get 8 right answers from 20 questions.
+
+So I am trying another training method: Random forests.
+
+## Training using random forests
+
+```{r}
+## Trainign the model using Random Forests
+train_data_forest <- train_data;
+test_data_forest <- test_data;
+
+modelFitForest <- train(classe ~.,data=train_data_forest, method="parRF", prox=TRUE)
+predictionsForest <- predict(modelFitForest,newdata=test_data_forest)
+confusionMatrix(predictionsForest, test_data_forest$classe)
+
+```
+
+Checking the confusion matrix for this new method shows a higher accuracy: 0.98.
+
+```{r}
+## Test file
+download.file("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv",destfile="test.csv",method="auto");
+test_data_quiz <- read.csv("test.csv", na.strings=c("NA","#DIV/0!",""));
+
+## Instead of loop trough all the columns and check for null values I am just removing the same columns
+## from the test data that I removed from the train data. I am also removing the column "problem_id"
+## present on the test data, so both datasets will have the same columns.
+cols_to_remove <- append(cols_to_remove, "problem_id")
+test_data2 <- test_data_quiz[ , !(names(test_data_quiz) %in% cols_to_remove)]
+
+predictions_quiz <- predict(modelFitForest, test_data2)
+
+```
+
+Using it to predict the quiz responses resulted in a higher grade: 19 right answers out of 20 questions.
+
+These are the 20 answers: 
+
+```{r}
+
+predictions_quiz;
+
+```
+
+### Data Credits
+
+Ugulino, W.; Cardador, D.; Vega, K.; Velloso, E.; Milidiu, R.; Fuks, H. Wearable Computing: Accelerometers' Data Classification of Body Postures and Movements. Proceedings of 21st Brazilian Symposium on Artificial Intelligence. Advances in Artificial Intelligence - SBIA 2012. In: Lecture Notes in Computer Science. , pp. 52-61. Curitiba, PR: Springer Berlin / Heidelberg, 2012. ISBN 978-3-642-34458-9. DOI: 10.1007/978-3-642-34459-6_6. 
+Cited by 2 (Google Scholar)
